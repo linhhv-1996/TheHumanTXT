@@ -130,7 +130,7 @@ class BgParticle {
 
         // Text hiển thị hay không — không phải hạt nào cũng cần text
         // Hạt ở xa (z lớn) → ẩn text; chỉ hiện khi đủ gần
-        this.showText = Math.random() < 0.35;  // 70% → 35%
+        this.showText = Math.random() < 0.65;  // tăng lên 65% để luôn có đủ text
     }
 
     draw(ctx, W, H, pX, pY, texts, isPaused, frame) {
@@ -211,25 +211,22 @@ class BgParticle {
         // ── Text — chỉ hiện khi đủ gần + đủ scale + hạt được chọn showText ──
         if (this.showText && this.text) {
             // Hiện text sớm hơn — từ xa hơn, không đợi scale lớn
-            // const tAlpha = Math.min(finalAlpha * 1.2, 0.80) * Math.min(1, (scale - 0.04) * 5.0);
-            const tAlpha = Math.min(finalAlpha * 0.7, 0.45) * Math.min(1, (scale - 0.08) * 4.0);
-            if (tAlpha > 0.04) {
-                // Font size có floor cao hơn — đọc được ngay cả khi còn xa
-                // const fontSize   = Math.max(13, 18 * scale) * centreScale;
+            // tAlpha: nới threshold để text hiện sớm hơn và không bị mất
+            const tAlpha = Math.min(finalAlpha * 1.0, 0.55) * Math.min(1, (scale - 0.04) * 3.0);
+            if (tAlpha > 0.02) {
                 const fontSize = Math.max(11, 15 * scale) * centreScale;
-                const maxWidth   = Math.max(360, 480 * scale);
-                const lineHeight = fontSize * 1.4;
 
                 ctx.font         = `italic ${fontSize}px Georgia`;
-                ctx.textAlign    = 'left';
-                ctx.textBaseline = 'middle';
+                // center dưới dot → text phân bố đều cả trái lẫn phải
+                ctx.textAlign    = 'center';
+                ctx.textBaseline = 'top';
 
-                // Single line, truncate 40 chars
-                const displayText = this.text.length > 65 ? this.text.slice(0, 65) + '…' : this.text;
+                // Truncate 55 chars
+                const displayText = this.text.length > 55 ? this.text.slice(0, 55) + '…' : this.text;
                 ctx.shadowColor   = 'rgba(0,0,0,0.85)';
                 ctx.shadowBlur    = 6;
                 ctx.fillStyle     = `rgba(${this.r},${this.g},${this.b},${tAlpha})`;
-                ctx.fillText(displayText, x2d + dotR + 6, y2d);
+                ctx.fillText(displayText, x2d, y2d + dotR + 5);
                 ctx.shadowBlur    = 0;
             }
         }

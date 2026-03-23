@@ -75,7 +75,7 @@
     onMount(async () => {
         mouseX = window.innerWidth  / 2;
         mouseY = window.innerHeight / 2;
-        engine = new NebulaEngine(canvasEl, { count: 150, texts: data.dbData.texts });
+        engine = new NebulaEngine(canvasEl, { count: 200, texts: data.dbData.texts });
         engine._isDetail = false;
         startHomeLoop();
 
@@ -469,7 +469,7 @@
     <div class="hero" transition:fade={{ duration: 500 }}>
         <p class="hero-eyebrow">AI is writing more words every day. Yours was human.</p>
         <h1 class="hero-title">Before AI forgets<br />where it learned<br />everything.</h1>
-        <p class="hero-whisper">What you'd want AI to learn from you — not the other way around.</p>
+        <p class="hero-whisper">Something you believed. A moment you lived. <br/>Permanent — not generated.</p>
         <div class="hero-actions">
             <button class="btn-main" onclick={handleLeaveAction} disabled={isRedirecting}>
                 {#if isRedirecting}
