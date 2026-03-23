@@ -437,12 +437,6 @@
                 {/if}
             </p>
 
-            {#if currentCommit.code}
-                <div class="code-block">
-                    <pre><code class="hljs">{@html highlightCode(currentCommit.code)}</code></pre>
-                </div>
-            {/if}
-
             {#if currentCommit.text}
                 <p class="voice-why">"{currentCommit.text}"</p>
             {/if}

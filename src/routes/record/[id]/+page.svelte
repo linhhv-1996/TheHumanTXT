@@ -31,10 +31,6 @@
             .trim();
     }
 
-    function highlightCode(code) {
-        if (!code) return "";
-        return hljs.highlightAuto(dedent(code)).value;
-    }
 
     let { data } = $props();
     let thoughtId = data.id;
@@ -189,13 +185,7 @@
                 Permanent record
             {/if}
         </p>
-        {#if thoughtData.code}
-            <div class="code-block">
-                <pre><code class="hljs"
-                        >{@html highlightCode(thoughtData.code)}</code
-                    ></pre>
-            </div>
-        {/if}
+
         {#if thoughtData.text}
             <p class="voice-why">"{thoughtData.text}"</p>
         {/if}
