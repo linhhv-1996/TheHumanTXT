@@ -3,11 +3,14 @@
 
     import { onMount, onDestroy } from "svelte";
     import { fade } from "svelte/transition";
-    import { authStore, logout } from "$lib/stores/auth";
+    import { authStore, logout, app } from "$lib/stores/auth";
     import LoginPopup from "$lib/components/LoginPopup.svelte";
-    import { saveRecordToFirebase, getUserRecords, getAllRecords } from "$lib/stores/db";
+    import { getUserRecords, getAllRecords } from "$lib/stores/db";
     import { goto } from "$app/navigation";
     import { NebulaEngine, DetailEngine } from "$lib/nebula";
+    import { getAuth } from "firebase/auth";
+
+    const firebaseAuth = getAuth(app);
 
     function formatDate(createdAt) {
         if (!createdAt) return '';
@@ -21,17 +24,22 @@
     let showManifest      = $state(false);
     let showLoginPopup    = $state(false);
     let isSubmitting      = $state(false);
-    let txtInput         = $state("");
+    let isRedirecting     = $state(false); // đang redirect sang Dodo
+    let isRegistering     = $state(false); // đang verify payment sau khi redirect về
+    let txtInput          = $state("");
     let whyInput          = $state("");
     let fieldName         = $state("");
     let fieldLocation     = $state("");
     let fieldLink         = $state("");
-    let hasTxtError      = $state(false);
-    let hasWhyError       = $state(false);
+    let hasTxtError       = $state(false);
     let isCheckingRecords = $state(false);
     let codeCharsLeft     = $derived(500 - txtInput.length);
     let whyCharsLeft      = $derived(160 - whyInput.length);
     let claimed           = $state(data.dbData.claimed);
+
+    // payment_id đã verify — có rồi mới cho mở popup submit
+    let pendingPaymentId  = $state("");
+    let registerError     = $state(""); // lỗi khi verify payment
 
     let canvasEl;
     let engine;
@@ -44,8 +52,8 @@
     let travelRecords  = $state([]);
     let travelIndex    = $state(0);
     let travelLoading  = $state(false);
-    let travelFlying   = $state(false);  // true khi engine đang drift/fly, chưa hiện card
-    let travelCard     = $state(false);  // true khi fly xong → hiện card
+    let travelFlying   = $state(false);
+    let travelCard     = $state(false);
     let travelLastDoc  = $state(null);
     let travelHasMore  = $state(true);
     let youLabelStyle  = $state('');
@@ -64,13 +72,101 @@
         animationId = requestAnimationFrame(loop);
     }
 
-    onMount(() => {
+    onMount(async () => {
         mouseX = window.innerWidth  / 2;
         mouseY = window.innerHeight / 2;
-        engine = new NebulaEngine(canvasEl, { count: 100, texts: data.dbData.texts });
+        engine = new NebulaEngine(canvasEl, { count: 150, texts: data.dbData.texts });
         engine._isDetail = false;
         startHomeLoop();
+
+        // ── Detect redirect về từ Dodo ────────────────────────────────────
+        const params    = new URLSearchParams(window.location.search);
+        const status    = params.get('status');
+        const paymentId = params.get('payment_id');
+
+        if (status === 'succeeded' && paymentId) {
+            history.replaceState({}, '', window.location.pathname);
+            await registerPayment(paymentId);
+            return;
+        }
+
+        // ── Watch auth — login/logout xong update pendingPaymentId ngay ────
+        authStore.subscribe(s => {
+            if (s.loading) return;
+            if (s.user) {
+                const saved = localStorage.getItem('pendingPaymentId');
+                pendingPaymentId = saved ?? "";
+            } else {
+                // Logout → reset state nhưng GIỮ localStorage
+                // (user login lại vẫn còn payment)
+                pendingPaymentId = "";
+            }
+        });
     });
+
+    // Verify payment với server, lưu vào Firestore, mở popup submit
+    async function registerPayment(paymentId) {
+        isRegistering = true;
+        registerError = "";
+
+        // Chờ auth load xong (trường hợp onMount chạy trước onAuthStateChanged)
+        await waitForAuth();
+
+        if (!$authStore.user) {
+            // Chưa login — lưu paymentId vào sessionStorage để xử lý sau khi login
+            sessionStorage.setItem('pendingPaymentId', paymentId);
+            showLoginPopup = true;
+            isRegistering = false;
+            return;
+        }
+
+        try {
+            const idToken = await firebaseAuth.currentUser.getIdToken(true);
+            const res = await fetch('/api/payment/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ paymentId }),
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                // Payment đã dùng rồi → đưa về trang record luôn nếu có
+                if (res.status === 409) {
+                    // Tìm record của user để redirect
+                    const myRecords = await getUserRecords($authStore.user.uid);
+                    if (myRecords.length > 0) {
+                        goto(`/record/${myRecords[0].id}`);
+                        return;
+                    }
+                }
+                throw new Error(err.message ?? 'Payment verification failed');
+            }
+
+            // Payment hợp lệ → lưu localStorage + state, mở popup submit luôn
+            localStorage.setItem('pendingPaymentId', paymentId);
+            pendingPaymentId = paymentId;
+            activePanel      = 'submit';
+            hasTxtError      = false;
+        } catch (err) {
+            registerError = err.message;
+        } finally {
+            isRegistering = false;
+        }
+    }
+
+    // Chờ Firebase auth load xong (max 3s)
+    function waitForAuth() {
+        return new Promise((resolve) => {
+            if (!$authStore.loading) { resolve(); return; }
+            const unsub = authStore.subscribe(s => {
+                if (!s.loading) { unsub(); resolve(); }
+            });
+            setTimeout(resolve, 3000); // fallback
+        });
+    }
 
     onDestroy(() => {
         if (animationId) cancelAnimationFrame(animationId);
@@ -83,35 +179,30 @@
         if (travelMode && engine?._isDetail) engine.setMouse(e.clientX, e.clientY);
     }
 
-    // ─── Swap → DetailEngine ──────────────────────────────────────────────────
+    // ─── Swap engines ─────────────────────────────────────────────────────────
     function mountDetailEngine(commit) {
         if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
         engine?.stop?.();
-
         const de = new DetailEngine(canvasEl, { texts: data.dbData.texts });
         de._isDetail = true;
-
-        de.onHideLanding = () => { /* drift phase done — không cần làm gì */ };
+        de.onHideLanding = () => {};
         de.onShowDetail  = () => { travelFlying = false; travelCard = true; };
         de.onLabelUpdate = (style, show) => { youLabelStyle = style; showYouLabel = show; };
-
         de.init(commit.id, commit.code || commit.text || '');
         de.start();
         engine = de;
     }
 
-    // ─── Swap → NebulaEngine ─────────────────────────────────────────────────
     function mountHomeEngine() {
         if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
         engine?.stop?.();
-
         const ne = new NebulaEngine(canvasEl, { count: 100, texts: data.dbData.texts });
         ne._isDetail = false;
         engine = ne;
         startHomeLoop();
     }
 
-    // ─── Travel: enter ────────────────────────────────────────────────────────
+    // ─── Travel ───────────────────────────────────────────────────────────────
     async function enterTravel() {
         travelMode    = true;
         travelIndex   = 0;
@@ -121,12 +212,10 @@
         travelCard    = false;
         travelFlying  = true;
         showYouLabel  = false;
-
         await fetchMoreRecords();
         if (travelRecords.length > 0) mountDetailEngine(travelRecords[0]);
     }
 
-    // ─── Travel: exit ────────────────────────────────────────────────────────
     function exitTravel() {
         travelMode   = false;
         travelCard   = false;
@@ -135,7 +224,6 @@
         mountHomeEngine();
     }
 
-    // ─── Travel: fetch ────────────────────────────────────────────────────────
     async function fetchMoreRecords() {
         if (travelLoading || !travelHasMore) return;
         travelLoading = true;
@@ -146,20 +234,15 @@
         travelLoading = false;
     }
 
-    // ─── Travel: navigate ────────────────────────────────────────────────────
     async function travelNext() {
         if (travelFlying) return;
         const nextIdx = travelIndex + 1;
-
-        // prefetch khi gần hết
         if (nextIdx >= travelRecords.length - 10 && travelHasMore) fetchMoreRecords();
-
         if (nextIdx >= travelRecords.length) {
             if (!travelHasMore) return;
             await fetchMoreRecords();
             if (nextIdx >= travelRecords.length) return;
         }
-
         travelIndex  = nextIdx;
         travelCard   = false;
         travelFlying = true;
@@ -176,35 +259,106 @@
         mountDetailEngine(travelRecords[travelIndex]);
     }
 
-    // ─── Submit ───────────────────────────────────────────────────────────────
-    function handleLeaveAction() {
-        if ($authStore.user) { activePanel = "submit"; hasTxtError = hasWhyError = false; }
-        else showLoginPopup = true;
+    // ─── Checkout: redirect sang Dodo ─────────────────────────────────────────
+    async function handleLeaveAction() {
+        if (!$authStore.user) { showLoginPopup = true; return; }
+
+        // Đã mua rồi chưa submit → mở popup submit luôn
+        if (pendingPaymentId) {
+            activePanel = 'submit';
+            hasTxtError = false;
+            return;
+        }
+
+        isRedirecting = true;
+        try {
+            const idToken = await firebaseAuth.currentUser.getIdToken(true);
+            const res = await fetch('/api/checkout/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`,
+                },
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message ?? 'Could not start checkout');
+            }
+
+            const { checkout_url } = await res.json();
+            window.location.href = checkout_url;
+        } catch (err) {
+            alert('Error: ' + err.message);
+            isRedirecting = false;
+        }
     }
 
     function onLoginSuccess() {
         showLoginPopup = false;
-        activePanel    = "submit";
-        hasTxtError   = hasWhyError = false;
+
+        // Nếu có pendingPaymentId trong sessionStorage (user chưa login lúc redirect về)
+        const storedPaymentId = sessionStorage.getItem('pendingPaymentId');
+        if (storedPaymentId) {
+            sessionStorage.removeItem('pendingPaymentId');
+            registerPayment(storedPaymentId);
+        }
     }
 
-    async function processSubmission(isPaid) {
+    // ─── Submit form sau khi đã có payment ────────────────────────────────────
+    async function processSubmission() {
         const raw = txtInput.trim();
         if (!raw || raw.length > 500) { hasTxtError = true; return; }
+
         isSubmitting = true;
         try {
-            const docId = await saveRecordToFirebase({
-                text:     raw,
-                why:      whyInput.trim().slice(0, 160),
-                name:     fieldName.trim().slice(0, 160),
-                location: fieldLocation.trim().slice(0, 160),
-                link:     fieldLink.trim().slice(0, 160),
-                isPaid,
+            const idToken = await firebaseAuth.currentUser.getIdToken(true);
+            const res = await fetch('/api/submit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({
+                    paymentId: pendingPaymentId,
+                    text:      raw,
+                    why:       whyInput.trim().slice(0, 160),
+                    name:      fieldName.trim().slice(0, 160),
+                    location:  fieldLocation.trim().slice(0, 160),
+                    link:      fieldLink.trim().slice(0, 160),
+                }),
             });
-            goto(`/record/${docId}`);
-        } catch (error) {
-            alert("Lỗi: " + error.message);
-        } finally {
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message ?? 'Submit failed');
+            }
+
+            const { recordId } = await res.json();
+            localStorage.removeItem('pendingPaymentId');
+
+            /// GỌI QSTASH
+            try {
+                await fetch('/api/publish-qstash', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        firebaseId: recordId,
+                        text: raw,
+                        why: whyInput.trim().slice(0, 160),
+                        name: fieldName.trim().slice(0, 160),
+                        location: fieldLocation.trim().slice(0, 160),
+                        link: fieldLink.trim().slice(0, 160)
+                    })
+                });
+            } catch (qErr) {
+                console.error('Lỗi khi đẩy message sang QStash:', qErr);
+            }
+
+            goto(`/record/${recordId}`);
+        } catch (err) {
+            // Lỗi submit — tiền vẫn còn đó, payment vẫn pending → user thử lại được
+            alert('Something went wrong — your payment is safe.\n\n' + err.message);
             isSubmitting = false;
         }
     }
@@ -214,18 +368,16 @@
         isCheckingRecords = true;
         const myThoughts = await getUserRecords($authStore.user.uid);
         isCheckingRecords = false;
-
         if (myThoughts.length === 0) {
             activePanel = "submit";
         } else if (myThoughts.length === 1) {
             goto(`/record/${myThoughts[0].id}`);
         } else {
-            // Nhiều records → enter travel mode với records của user (không goto /my-archive)
             travelMode    = true;
             travelIndex   = 0;
             travelRecords = myThoughts;
             travelLastDoc = null;
-            travelHasMore = false; // getUserRecords đã fetch hết, không cần load thêm
+            travelHasMore = false;
             travelCard    = false;
             travelFlying  = true;
             showYouLabel  = false;
@@ -245,9 +397,10 @@
             return;
         }
         if (e.key === 'Escape') {
-            if (isSubmitting) return;
+            if (isSubmitting || isRegistering) return;
             if (showManifest)   { showManifest   = false; return; }
             if (showLoginPopup) { showLoginPopup = false; return; }
+            if (activePanel === 'submit' && pendingPaymentId) return; // đừng đóng khi đang chờ submit
         }
     }}
 />
@@ -256,22 +409,28 @@
     <LoginPopup on:close={() => (showLoginPopup = false)} on:success={onLoginSuccess} />
 {/if}
 
-<!-- Canvas luôn visible — engine swap phía dưới, animation chạy xuyên suốt -->
 <canvas bind:this={canvasEl} id="canvas"></canvas>
 
-<!-- You-label (travel mode, giống detail page) -->
 {#if travelMode}
     <div id="you-label" style="{youLabelStyle}" class:show={showYouLabel}>— the thought</div>
 {/if}
 
-<!-- TOP BAR & FOOTER — ẩn khi travel -->
+<!-- TOP BAR & FOOTER -->
 {#if !travelMode}
     <div id="top-bar" transition:fade={{ duration: 300 }}>
         <button id="manifest-link" onclick={() => (showManifest = true)}>Manifest</button>
         <div class="top-bar-auth">
             {#if $authStore.user}
-                <span class="auth-email">{$authStore.user.email}</span>
-                <button class="auth-btn" onclick={logout}>logout</button>
+                <button
+                    class="auth-btn auth-btn--submission"
+                    onclick={handleViewMySubmission}
+                    disabled={isCheckingRecords}
+                >{isCheckingRecords ? "LOCATING..." : "YOUR SUBMISSION"}</button>
+                <div class="auth-row">
+                    <span class="auth-email">{$authStore.user.email}</span>
+                    <span class="auth-sep">·</span>
+                    <button class="auth-btn" onclick={logout}>logout</button>
+                </div>
             {:else}
                 <button class="auth-btn" onclick={() => (showLoginPopup = true)}>login</button>
             {/if}
@@ -281,6 +440,7 @@
         <a class="footer-link" target="_blank" href="/privacy">Privacy Policy</a>
         <a class="footer-link" target="_blank" href="/terms">Terms of Service</a>
         <a class="footer-link" target="_blank" href="https://x.com/hlinhbuilds">X(Twitter)</a>
+        <a class="footer-link" target="_blank" rel="noopener noreferrer" href="https://arbiscan.io/address/0xDIA_CHI_CONTRACT_CUA_MAY#readContract">Verify on-chain ↗</a>
     </div>
 {/if}
 
@@ -304,43 +464,52 @@
     </div>
 {/if}
 
-<!-- HERO — ẩn khi travel -->
+<!-- HERO -->
 {#if activePanel === "hero" && !travelMode}
     <div class="hero" transition:fade={{ duration: 500 }}>
         <p class="hero-eyebrow">AI is writing more words every day. Yours was human.</p>
         <h1 class="hero-title">Before AI forgets<br />where it learned<br />everything.</h1>
+        <p class="hero-whisper">What you'd want AI to learn from you — not the other way around.</p>
         <div class="hero-actions">
-            <button class="btn-main" onclick={handleLeaveAction}>Leave your mark — $5</button>
-            <a
-                class="btn-ghost"
-                href="https://arbiscan.io/address/0xDIA_CHI_CONTRACT_CUA_MAY#readContract"
-                target="_blank" rel="noopener noreferrer"
-                style="text-decoration:none;display:flex;align-items:center;justify-content:center;"
-            >Verify on-chain ↗</a>
+            <button class="btn-main" onclick={handleLeaveAction} disabled={isRedirecting}>
+                {#if isRedirecting}
+                    Redirecting...
+                {:else if pendingPaymentId}
+                    Leave your mark →
+                {:else}
+                    Leave your mark — $5
+                {/if}
+            </button>
+            <button class="btn-explore" onclick={enterTravel}>
+                Explore →
+            </button>
         </div>
         <p class="hero-note">{claimed} records &nbsp;·&nbsp; On-chain forever.</p>
     </div>
 {/if}
 
-<!-- FAB BUTTONS — ẩn khi travel -->
-{#if activePanel === "hero" && !travelMode}
-    <button class="fab-travel" onclick={enterTravel} transition:fade={{ duration: 300 }}>
-        EXPLORE →
-    </button>
-    <button
-        class="fab-submissions"
-        onclick={handleViewMySubmission}
-        disabled={isCheckingRecords}
-        transition:fade={{ duration: 300 }}
-    >{isCheckingRecords ? "LOCATING..." : "YOUR SUBMISSION →"}</button>
+
+
+<!-- VERIFYING PAYMENT — overlay nhẹ, không block canvas -->
+{#if isRegistering}
+    <div class="payment-verifying" transition:fade={{ duration: 200 }}>
+        <p>Verifying payment…</p>
+    </div>
 {/if}
 
-<!-- SUBMIT PANEL -->
-{#if activePanel === "submit" && !travelMode}
-    <!-- svelte-ignore a11y_consider_explicit_label -->
-    <button class="panel-backdrop" onclick={() => { if (!isSubmitting) activePanel = "hero"; }} transition:fade></button>
+<!-- REGISTER ERROR — thanh toán xong nhưng verify thất bại -->
+{#if registerError && !isRegistering}
+    <div class="payment-error" transition:fade={{ duration: 200 }}>
+        <p>⚠️ {registerError}</p>
+        <p class="payment-error-sub">Your payment is safe. <a href="/cdn-cgi/l/email-protection#7f0c0a0f0f100d0b3f06100a0d1b10121e1611511c1012">Contact support</a> with your payment ID.</p>
+        <button onclick={() => (registerError = "")}>Dismiss</button>
+    </div>
+{/if}
+
+<!-- SUBMIT PANEL — chỉ mở khi đã có pendingPaymentId -->
+{#if activePanel === "submit" && !travelMode && pendingPaymentId}
     <div class="submit-panel active" transition:fade>
-        <p class="submit-label">Entry #{claimed + 1} &nbsp;·&nbsp; your mark</p>
+        <p class="submit-label">Entry #{claimed + 1} &nbsp;·&nbsp; payment confirmed ✓</p>
         <div style="width:100%;position:relative;">
             <textarea
                 class:error={hasTxtError}
@@ -349,68 +518,62 @@
                 maxlength="500" rows="6"
                 style="font-size:13px;resize:vertical;"
                 oninput={() => (hasTxtError = false)}
+                disabled={isSubmitting}
             ></textarea>
             <p class="char-counter {codeCharsLeft <= 50 ? 'danger' : ''}">{codeCharsLeft}</p>
         </div>
         <div style="width:100%;position:relative;margin-top:8px;">
             <input
-                class="field-input {hasWhyError ? 'error' : ''}"
+                class="field-input"
                 bind:value={whyInput}
                 placeholder="Why did you write this? (optional)"
                 maxlength="160" style="width:100%;"
-                oninput={() => (hasWhyError = false)}
+                disabled={isSubmitting}
             />
             <p class="char-counter {whyCharsLeft <= 15 ? 'danger' : ''}">{whyCharsLeft}</p>
         </div>
         <div class="fields-row">
             <div class="field-group">
                 <span class="field-label">Name</span>
-                <input class="field-input" bind:value={fieldName} placeholder="anonymous" maxlength="160" />
+                <input class="field-input" bind:value={fieldName} placeholder="anonymous" maxlength="160" disabled={isSubmitting} />
             </div>
             <div class="field-group">
                 <span class="field-label">Location</span>
-                <input class="field-input" bind:value={fieldLocation} placeholder="somewhere" maxlength="160" />
+                <input class="field-input" bind:value={fieldLocation} placeholder="somewhere" maxlength="160" disabled={isSubmitting} />
             </div>
             <div class="field-group full-width">
                 <span class="field-label">X / Link</span>
-                <input class="field-input" bind:value={fieldLink} placeholder="@handle or https://..." maxlength="160" />
+                <input class="field-input" bind:value={fieldLink} placeholder="@handle or https://..." maxlength="160" disabled={isSubmitting} />
             </div>
         </div>
         <div class="submit-footer">
-            <button class="btn-back" onclick={() => (activePanel = "hero")} disabled={isSubmitting}>← back</button>
-            <button class="btn-main" onclick={() => processSubmission(false)} disabled={isSubmitting}>
-                {isSubmitting ? "PROCESSING..." : "Record your mark — $5"}
+            <button class="btn-back" onclick={() => (activePanel = 'hero')} disabled={isSubmitting}>← back</button>
+            <button class="btn-main" onclick={processSubmission} disabled={isSubmitting}>
+                {isSubmitting ? "SAVING..." : "Submit your mark →"}
             </button>
         </div>
     </div>
 {/if}
 
-<!-- ══════════════════════════════════════════════
-     TRAVEL MODE — chỉ UI mỏng, canvas vẫn live
-     ══════════════════════════════════════════════ -->
+<!-- TRAVEL MODE -->
 {#if travelMode}
-    <!-- Loading khi fetch lần đầu chưa xong -->
     {#if travelLoading && travelRecords.length === 0}
         <div id="loading" transition:fade={{ duration: 300 }}>
             <p class="loading-text">Locating thought</p>
         </div>
     {/if}
 
-    <!-- Cancel button (thay thế top-bar) -->
     <button class="travel-cancel" onclick={exitTravel} transition:fade={{ duration: 200 }}>
         ✕ Cancel
     </button>
 
-    <!-- Counter -->
     {#if travelRecords.length > 0}
         <div class="travel-counter" transition:fade={{ duration: 200 }}>
             {travelIndex + 1} / {travelHasMore ? travelRecords.length + '+' : travelRecords.length}
         </div>
     {/if}
 
-    <!-- Prev / Next — chỉ hiện sau khi card đã hiện (fly xong) -->
     {#if travelCard}
-        <!-- Desktop: arrows 2 cạnh, không đè data -->
         {#if travelIndex > 0}
             <button class="travel-nav travel-nav--prev" onclick={travelPrev} transition:fade={{ duration: 150 }}>‹</button>
         {/if}
@@ -418,14 +581,12 @@
             <button class="travel-nav travel-nav--next" onclick={travelNext} transition:fade={{ duration: 150 }}>›</button>
         {/if}
 
-        <!-- Mobile: thanh ngang cố định dưới cùng -->
         <div class="travel-nav-bar" transition:fade={{ duration: 150 }}>
             <button class="travel-nav-btn" onclick={travelPrev} disabled={travelIndex === 0}>‹ prev</button>
             <button class="travel-nav-btn" onclick={travelNext} disabled={travelIndex >= travelRecords.length - 1 && !travelHasMore}>next ›</button>
         </div>
     {/if}
 
-    <!-- Detail card — xuất hiện sau khi DetailEngine fire onShowDetail -->
     {#if travelCard && currentCommit}
         {#key currentCommit.id}
         <div id="voice-card" class="show" transition:fade={{ duration: 400 }}>

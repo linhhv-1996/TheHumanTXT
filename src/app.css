@@ -75,49 +75,68 @@ html {
     color: #aaa;
 }
 
-/* ── FLOATING submissions button ── */
-.fab-submissions {
-    position: fixed;
-    bottom: 28px;
-    right: 28px;
-    z-index: 20;
-    font-family: 'IBM Plex Mono', monospace;
+.auth-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.auth-sep {
+    font-family: "IBM Plex Mono", monospace;
     font-size: 0.5rem;
-    letter-spacing: 0.12rem;
-    color: #4a8fcf;
-    background: rgba(10, 10, 10, 0.75);
-    border: 1px solid #1e3d5a;
-    padding: 10px 14px;
+    color: #383838;
+    user-select: none;
+}
+
+/* YOUR SUBMISSION — uppercase, có gạch chân */
+.auth-btn--submission {
+    color: #909090;
+    letter-spacing: 0.14rem;
+    text-transform: uppercase;
     cursor: pointer;
-    transition: color 0.3s, border-color 0.3s, background 0.3s;
-    backdrop-filter: blur(6px);
-    pointer-events: all;
-    white-space: nowrap;
+    text-decoration: underline;
+    text-decoration-color: #404040;
+    text-underline-offset: 3px;
+    transition: color 0.3s, text-decoration-color 0.3s;
 }
 
-.fab-submissions:hover {
-    color: #7ab8f0;
-    border-color: #4a8fcf;
-    background: rgba(20, 20, 30, 0.85);
+.auth-btn--submission:hover {
+    color: #c2c2c2;
+    text-decoration-color: #666;
 }
 
-.fab-submissions:disabled {
+.auth-btn--submission:disabled {
     opacity: 0.5;
     cursor: default;
 }
 
+.fab-group {
+    position: fixed;
+    bottom: 60px;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+}
+
 @media (max-width: 540px) {
-    .fab-submissions {
-        bottom: 70px;
-        right: 16px;
+    .fab-group {
+        bottom: 56px;
+        gap: 8px;
+    }
+
+    .fab-travel {
         font-size: 0.46rem;
         padding: 9px 12px;
     }
-
-    .auth-email {
-        max-width: 90px;
-    }
 }
+
+
 
 /* ── CENTER HERO ── */
 .hero {
@@ -133,6 +152,29 @@ html {
     align-items: center;
     gap: 0;
     transition: opacity 1s;
+    width: min(480px, 92vw);
+}
+
+.hero-whisper {
+    font-family: 'IM Fell English', Georgia, serif;
+    font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+    letter-spacing: 0.01em;
+    color: rgba(255, 255, 255, 0.72);
+    line-height: 1.65;
+    text-align: center;
+    margin: 8px 0 36px;
+    font-weight: 400;
+    font-style: italic;
+    max-width: 380px;
+}
+
+@media (max-width: 540px) {
+    .hero-whisper {
+        font-size: clamp(0.88rem, 4vw, 1rem);
+        margin: 6px 0 28px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.68);
+    }
 }
 
 .hero.hidden {
@@ -171,21 +213,17 @@ html {
 
 .hero-actions {
     display: flex;
-    flex-direction: column;
-    /* Ép xếp dọc 2 nút */
-    gap: 14px;
-    align-items: center;
+    flex-direction: row;
+    gap: 10px;
+    align-items: stretch;
     pointer-events: all;
     justify-content: center;
     width: 100%;
-    max-width: 340px;
-    /* Giới hạn độ rộng để nút không bị bè ra dài quá trên màn hình to */
+    max-width: 420px;
 }
 
-.hero-actions .btn-main,
-.hero-actions .btn-ghost {
-    width: 100%;
-    /* Cho 2 nút dài bằng nhau */
+.hero-actions .btn-main {
+    flex: 1;
 }
 
 .btn-main {
@@ -204,6 +242,29 @@ html {
 
 .btn-main:hover {
     opacity: 0.85;
+}
+
+/* Explore button — ghost style, ngang hàng CTA */
+.btn-explore {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.2rem;
+    text-transform: uppercase;
+    background: transparent;
+    color: #9e7ecf;
+    border: 1px solid #3d2a5e;
+    padding: 13px 24px;
+    cursor: pointer;
+    transition: color 0.3s, border-color 0.3s, background 0.3s;
+    backdrop-filter: blur(6px);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.btn-explore:hover {
+    color: #c8a8ff;
+    border-color: #7a50bf;
+    background: rgba(20, 15, 30, 0.6);
 }
 
 .btn-ghost {
@@ -231,6 +292,8 @@ html {
     letter-spacing: 0.08rem;
     color: #c2c2c2;
 }
+
+
 
 .my-thought-link {
     margin-top: 10px;
@@ -624,14 +687,17 @@ textarea.error:focus {
 /* ── FOOTER LINKS ── */
 #footer-links {
     position: fixed;
-    bottom: 25px;
+    bottom: 16px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 20;
     display: flex;
-    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 20px;
     pointer-events: all;
-    white-space: nowrap;
+    width: max-content;
+    max-width: 90vw;
 }
 
 .footer-link {
@@ -981,10 +1047,11 @@ textarea.error:focus {
         flex-direction: column;
         width: min(300px, 80vw);
         gap: 10px;
+        max-width: 300px;
     }
 
     .hero-actions .btn-main,
-    .hero-actions .btn-ghost {
+    .hero-actions .btn-explore {
         flex: unset;
         width: 100%;
         white-space: nowrap;
@@ -1038,6 +1105,32 @@ textarea.error:focus {
 
     #top-bar {
         padding: 14px 14px;
+    }
+
+    /* Mobile: wrap 2 dòng — dòng 1: your submission, dòng 2: email + logout */
+    .top-bar-auth {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
+    }
+
+    .auth-email {
+        font-size: 0.46rem;
+        max-width: 150px;
+    }
+
+    .auth-btn--submission {
+        font-size: 0.46rem;
+        letter-spacing: 0.08rem;
+    }
+
+    .auth-btn {
+        font-size: 0.46rem;
+        letter-spacing: 0.1rem;
+    }
+
+    .auth-sep {
+        display: none;
     }
 
     #share-box {
@@ -1505,10 +1598,6 @@ textarea.error:focus {
 
 
 .fab-travel {
-    position: fixed;
-    bottom: 70px;
-    right: 28px;
-    z-index: 20;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.5rem;
     letter-spacing: 0.12rem;
@@ -1677,13 +1766,6 @@ textarea.error:focus {
 }
 
 @media (max-width: 540px) {
-    .fab-travel {
-        bottom: 110px;
-        right: 16px;
-        font-size: 0.46rem;
-        padding: 9px 12px;
-    }
-
     .travel-cancel {
         top: 10px;
         right: 16px;

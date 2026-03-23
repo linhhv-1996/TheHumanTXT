@@ -23,6 +23,7 @@
 	"dependencies": {
 		"@sveltejs/adapter-node": "^5.5.4",
 		"@upstash/qstash": "^2.10.1",
+		"dodopayments": "^2.23.3",
 		"dotenv": "^17.3.1",
 		"ethers": "^6.16.0",
 		"firebase": "^12.11.0",

@@ -1,15 +1,12 @@
-// @ts-nocheck
 import { error, json } from '@sveltejs/kit';
 import { ethers } from 'ethers';
 import { Receiver } from "@upstash/qstash";
 import { PRIVATE_KEY, RPC_URL, CONTRACT_ADDRESS, QSTASH_CURRENT_SIGNING_KEY, QSTASH_NEXT_SIGNING_KEY } from '$env/static/private';
-import { updateRecordTxHash } from '$lib/stores/db';
-
 import { adminDb } from '$lib/server/firebaseAdmin';
 
 // ABI: Bản đồ để ethers biết hàm recordThought nằm ở đâu trong contract
 const ABI = [
-    "function recordThought(string _code, string _text, string _name, string _location, string _link) public"
+    "function recordThought(string _text, string _why, string _name, string _location, string _link) public"
 ];
 
 const receiver = new Receiver({
@@ -21,10 +18,11 @@ export async function POST({ request }) {
     // 1. Xác thực xem có đúng là QStash gọi không (bảo mật)
     const signature = request.headers.get("upstash-signature");
     const body = await request.text();
+    // @ts-ignore
     const isValid = await receiver.verify({ signature, body });
     if (!isValid) throw error(401, "Unauthorized");
 
-    const { code, text, name, location, link, firebaseId } = JSON.parse(body);
+    const { text, why, name, location, link, firebaseId } = JSON.parse(body);
 
     try {
         // 2. Kết nối tới Blockchain bằng Ví của bác
@@ -34,7 +32,7 @@ export async function POST({ request }) {
 
         // 3. Thực hiện ghi dữ liệu lên Chain
         console.log(`Đang đẩy Thought ${firebaseId} lên mạng...`);
-        const tx = await contract.recordThought(code, text, name, location, link);
+        const tx = await contract.recordThought(text, why, name, location, link);
         
         // 4. Đợi giao dịch được xác nhận (Mining)
         const receipt = await tx.wait();

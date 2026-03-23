@@ -78,7 +78,8 @@ export class NebulaEngine {
 // ─── Nebula colour palette ────────────────────────────────────────────────────
 // Mỗi màu: [r, g, b] — xác suất phân phối theo vẻ đẹp thực tế của nebula
 const NEBULA_PALETTE = [
-    [180, 215, 255],   // xanh lạnh — phổ biến nhất (~40%)
+    // [180, 215, 255],   // xanh lạnh — phổ biến nhất (~40%)
+    [255, 255, 255],
     [200, 180, 255],   // tím lavender
     [160, 200, 255],   // ice blue
     [255, 255, 255],   // trắng thuần — điểm sáng
@@ -129,7 +130,7 @@ class BgParticle {
 
         // Text hiển thị hay không — không phải hạt nào cũng cần text
         // Hạt ở xa (z lớn) → ẩn text; chỉ hiện khi đủ gần
-        this.showText = Math.random() < 0.70;
+        this.showText = Math.random() < 0.35;  // 70% → 35%
     }
 
     draw(ctx, W, H, pX, pY, texts, isPaused, frame) {
@@ -210,10 +211,12 @@ class BgParticle {
         // ── Text — chỉ hiện khi đủ gần + đủ scale + hạt được chọn showText ──
         if (this.showText && this.text) {
             // Hiện text sớm hơn — từ xa hơn, không đợi scale lớn
-            const tAlpha = Math.min(finalAlpha * 1.2, 0.80) * Math.min(1, (scale - 0.04) * 5.0);
+            // const tAlpha = Math.min(finalAlpha * 1.2, 0.80) * Math.min(1, (scale - 0.04) * 5.0);
+            const tAlpha = Math.min(finalAlpha * 0.7, 0.45) * Math.min(1, (scale - 0.08) * 4.0);
             if (tAlpha > 0.04) {
                 // Font size có floor cao hơn — đọc được ngay cả khi còn xa
-                const fontSize   = Math.max(13, 18 * scale) * centreScale;
+                // const fontSize   = Math.max(13, 18 * scale) * centreScale;
+                const fontSize = Math.max(11, 15 * scale) * centreScale;
                 const maxWidth   = Math.max(360, 480 * scale);
                 const lineHeight = fontSize * 1.4;
 

@@ -9,7 +9,7 @@ export async function POST({ request, url }) {
         const payload = await request.json();
         
         const origin = url.origin.includes('localhost') 
-            ? 'https://da32-14-231-166-146.ngrok-free.app' 
+            ? 'https://thehumantxt.com/' 
             : url.origin;
 
         // Webhook URL để QStash gọi ngược lại sau khi queue
