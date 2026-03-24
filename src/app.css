@@ -1446,7 +1446,7 @@ textarea.error:focus {
 
     .onchain-row {
         flex-direction: column;
-        gap: 5px;
+        gap: 12px;
         align-items: center;
         margin-bottom: 20px;
     }
