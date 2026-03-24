@@ -14,14 +14,14 @@
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://thehumantxt.com/" />
-  <meta property="og:title" content="The Human TXT · You were here." />
+  <meta property="og:title" content="The Human TXT · Your words. On-chain. Forever." />
   <meta property="og:description" content="AI is writing more words every day. Trained on yours. 500 characters. Five dollars. One permanent record — on-chain, timestamped, owned by no one." />
   <meta property="og:image" content="https://thehumantxt.com/og-image.png" />
 
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:url" content="https://thehumantxt.com/" />
-  <meta name="twitter:title" content="The Human TXT · You were here." />
+  <meta name="twitter:title" content="The Human TXT · Your words. On-chain. Forever." />
   <meta name="twitter:description" content="AI is writing more words every day. Trained on yours. 500 characters. Five dollars. One permanent record — on-chain, timestamped, owned by no one." />
   <meta name="twitter:image" content="https://thehumantxt.com/og-image.png" />
 
