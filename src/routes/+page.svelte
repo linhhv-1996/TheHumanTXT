@@ -440,7 +440,7 @@
         <a class="footer-link" target="_blank" href="/privacy">Privacy Policy</a>
         <a class="footer-link" target="_blank" href="/terms">Terms of Service</a>
         <a class="footer-link" target="_blank" href="https://x.com/hlinhbuilds">X(Twitter)</a>
-        <a class="footer-link" target="_blank" rel="noopener noreferrer" href="https://arbiscan.io/address/0x2DC682a88f4aa9339720d58AFE41A8fd0a785997#readContract">Verify on-chain ↗</a>
+        <a class="footer-link" target="_blank" rel="noopener noreferrer" href="https://arbiscan.io/address/0x2DC682a88f4aa9339720d58AFE41A8fd0a785997#events">Verify on-chain ↗</a>
     </div>
 {/if}
 
