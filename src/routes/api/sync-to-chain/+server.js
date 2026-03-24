@@ -39,7 +39,7 @@ export async function POST({ request }) {
         
         console.log("Thành công! Tx Hash:", receipt.hash);
 
-        await adminDb.collection('thoughts').doc(firebaseId).update({
+        await adminDb.collection('records').doc(firebaseId).update({
             txHash: receipt.hash,
             status: "mined"
         });

@@ -8,9 +8,7 @@ export async function POST({ request, url }) {
     try {
         const payload = await request.json();
         
-        const origin = url.origin.includes('localhost') 
-            ? 'https://thehumantxt.com/' 
-            : url.origin;
+        const origin = 'https://thehumantxt.com';
 
         // Webhook URL để QStash gọi ngược lại sau khi queue
         const webhookUrl = `${origin}/api/sync-to-chain`;
